@@ -24,6 +24,20 @@ use crate::{
 	sys, trace_categories, traps, variables,
 };
 
+/// Process-wide hook run in every forked external-command child before exec
+/// (after the shell's own `ulimit`/`umask` hooks). An embedder uses it to put
+/// the commands its shells start under its own scheduling policy (nice, cgroup)
+/// without the host process itself changing. Must be async-signal-safe.
+#[cfg(unix)]
+static CHILD_PRE_EXEC: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+
+/// Installs the [`CHILD_PRE_EXEC`] hook; the first call wins (returns false
+/// when a hook was already set).
+#[cfg(unix)]
+pub fn set_child_pre_exec(hook: fn()) -> bool {
+	CHILD_PRE_EXEC.set(hook).is_ok()
+}
+
 thread_local! {
 	static BUILTIN_ON_BLOCKING_WORKER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -371,6 +385,19 @@ pub async fn compose_std_command<S: AsRef<OsStr>, SE: extensions::ShellExtension
 				nix::sys::stat::umask(nix::sys::stat::Mode::from_bits_truncate(
 					mask as nix::libc::mode_t,
 				));
+				Ok(())
+			});
+		}
+	}
+
+	// The embedder's process-wide child hook (`set_child_pre_exec`).
+	#[cfg(unix)]
+	if let Some(&hook) = CHILD_PRE_EXEC.get() {
+		// SAFETY: runs in the forked child before exec; the hook's contract is
+		// async-signal-safety (`set_child_pre_exec`).
+		unsafe {
+			cmd.pre_exec(move || {
+				hook();
 				Ok(())
 			});
 		}

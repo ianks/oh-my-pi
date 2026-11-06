@@ -4,8 +4,11 @@ Carries only what Amity (shopify-playground/amity, `rig` runtime) needs to build
 
 1. `pi-ast`: tree-sitter `wasm` is an opt-in feature (upstream PR can1357/oh-my-pi#17153).
 2. vendored `brush-core`: `pre_exec(setsid)` fallback when `process_setsid` is unavailable (upstream PR #17154).
+3. vendored `brush-core`: `commands::set_child_pre_exec(fn())`, a process-wide hook run in every external-command
+   child before exec (Amity puts rig agents' commands at nice 10 in its `agents/` cgroup). Amity-only; keep on rebase.
 
-Branch `amity/stable-toolchain` = upstream `main` at some commit + one commit with both patches.
+Branch `amity/stable-toolchain` = upstream `main` at some commit + one commit with patches 1-2, this file, and a
+commit with patch 3.
 (`xutf` is not forked: Amity's `crates/xutf-shim` replaces it via `[patch.crates-io]`.)
 
 ## Rebase procedure (bump the pinned rev)
